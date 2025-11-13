@@ -3,26 +3,63 @@ title: Exploratory Data Analysis
 format: typst
 ---
 
+``` {r}
+#| include: false
+library(dplyr)
+library(stringr)
+library(sf)
+library(ggplot2)
+```
+
 ### Question 1
 
-Put your question here.
+How many districts featured candidates from the same party?
 
 ### Answer 1
 
-Put your answer here.
+``` {r}
+#| echo: false
+#read csv data
+vote_counts = readRDS("data/clean_vote_counts")
+grouped_vote_counts = vote_counts |>
+    group_by(CDDIST) |>
+    summarize(CNGDEM02 = sum(CNGDEM02), CNGREP02 = sum(CNGREP02))
+
+print(paste(sum(grouped_vote_counts$CNGDEM02 != 0 | grouped_vote_counts$CNGREP02 != 0), "races featured two candidates from the same party"))
+
+```
 
 ### Question 2
 
-Put your question here.
+What is the range of total sizes of precincts?
 
 ### Answer 2
 
-Put your answer here.
+``` {r}
+#| echo: false
+vote_reg = vote_counts |>
+    group_by(SVPREC) |>
+    summarize(reg = sum(TOTREG)) |>
+    filter(reg != 0)
+
+print(paste("The smallest precinct had", min(vote_reg$reg), "voter registrations while the largest had", max(vote_reg$reg)))
+```
 
 ### Question 3
 
-Put your question here.
+What proportion of votes were absentee votes?
 
 ### Answer 3
 
-Put your answer here.
+``` {r}
+#| echo: false
+absentee = vote_counts |>
+    filter(str_detect(SVPREC, "A")) |>
+    summarize(votes =sum(TOTVOTE))
+
+non_absentee = vote_counts |>
+    filter(!str_detect(SVPREC, "A")) |>
+    summarize(votes =sum(TOTVOTE))
+
+print(paste((absentee / (non_absentee + absentee)) * 100, "% of all votes were absentee votes", sep = ""))
+```

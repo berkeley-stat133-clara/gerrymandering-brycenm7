@@ -3,3 +3,90 @@ title: Data Cleaning
 format: typst
 ---
 
+Imports
+``` {r}
+library(dplyr)
+library(stringr)
+library(sf)
+library(ggplot2)
+```
+
+Cleaning sv vote count data by precinct
+``` {r}
+#read csv data
+vote_counts = read.csv("data/g24_sov_by_g24_svprec.csv")
+
+#remove rows with missing values and non precint data rows
+clean_vote_counts = vote_counts |>
+    filter(str_detect(CNGDEM01, "^\\d+$")) |>
+    filter(ADDIST != 0)
+    
+#define function to check if column is numeric
+is_numeric = function(x) {
+    if (!is.character(x)) return(FALSE)
+    sum(str_detect(x, "^\\d+$")) == length(x)
+}
+
+#convert rows that are fully numeric to numeric
+clean_vote_counts = clean_vote_counts |>
+    mutate(across(.cols = where(is_numeric), .fns = as.integer))
+
+saveRDS(clean_vote_counts, "data/clean_vote_counts")
+
+```
+
+Cleaning sr vote count data
+
+``` {r}
+#read csv data
+sr_votes = read.csv("data/state_g24_sov_data_by_g24_srprec.csv")
+
+#remove rows with missing values and non precint data rows
+clean_sr_votes = sr_votes |>
+    filter(str_detect(CNGDEM01, "^\\d+$")) |>
+    filter(ADDIST != 0)
+
+#convert rows that are fully numeric to numeric
+clean_sr_votes = clean_sr_votes |>
+    mutate(across(.cols = where(is_numeric), .fns = as.integer))
+
+saveRDS(clean_sr_votes, "data/clean_sr_votes")
+
+```
+
+Load geometries
+```{r}
+#load geometries
+prop_ca_prec = st_read("data/shapefiles/AB604/AB604.shp")
+ca_prec = st_read("data/shapefiles/srprec_state_g24_v01_shp/srprec_state_g24_v01_shp.shp")
+```
+
+Join geometries
+``` {r}
+#correct errors
+ca_prec <- ca_prec |>
+ st_transform(crs = 3310) |> # switch to equal area projection first
+ st_set_precision(1) |> # snap points to 1 m grid
+ st_make_valid() |> # fix self-intersections/bow-ties
+ st_collection_extract("POLYGON")
+
+prop_ca_prec = prop_ca_prec |>
+    st_transform(crs = 3310)
+
+#join current precinct shape with vote data
+sr_geom = ca_prec |>
+    left_join(clean_sr_votes, by = "SRPREC_KEY")
+
+#find intersection areas of current and proposed precincts
+intersection = st_intersection(sr_geom, prop_ca_prec) |>
+    mutate(areas = st_area(geometry))
+
+weights = intersection |>
+    group_by(SRPREC_KEY) |>
+    mutate(original_area = sum(areas), area_weight = areas / original_area)
+
+weighted_votes = weights |>
+    mutate(CNGDEM01 = as.integer(CNGDEM01 * area_weight), CNGREP01 = as.integer(CNGREP01 * area_weight))
+
+saveRDS(weighted_votes, "data/weighted_votes")
+```

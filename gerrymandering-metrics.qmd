@@ -4,8 +4,52 @@ format: typst
 ---
 
 ### 2024 Election Results and the 2024 District Map
+``` {r}
 
+#group votes by congressional precinct (only considers precincts with D-R races)
+vote_counts_by_prec = clean_vote_counts |>
+    group_by(CDDIST) |>
+    summarize(votes_dem01 = sum(CNGDEM01), votes_rep01 = sum(CNGREP01)) |>
+    filter(votes_dem01 != 0 & votes_rep01 != 0) |>
+
+#function for counting votes wasted
+votes_wasted = function(a, b) {
+    wasted_a = 0
+    for (i in length(a)) {
+        votes_a = a[i]
+        votes_b = b[i]
+        if (votes_a < votes_b) {
+            wasted_a = wasted_a + votes_a
+        } else {
+            wasted_a = wasted_a + (votes_a - floor((votes_a + votes_b) / 2))
+        }
+    }
+    wasted_a
+}
+
+#calculate mean-median and efficiency gap
+vote_counts_by_prec |>
+    mutate(prop_rep = votes_rep01 / (votes_dem01 + votes_rep01)) |>
+    summarize("mean-median" = mean(prop_rep) - median(prop_rep), efficiency = (votes_wasted(votes_rep01, votes_dem01) - votes_wasted(votes_dem01, votes_rep01)) / (votes_wasted(votes_rep01, votes_dem01) + votes_wasted(votes_dem01, votes_rep01)))
+    
+
+```
 
 
 ### 2024 Election Results and the proposed 2025 District Map
 
+``` {r}
+
+#group votes by precinct (only considers precincts with D-R races)
+vote_counts_by_sr_prec = weighted_votes |>
+    group_by(CDDIST) |>
+    summarize(votes_dem01 = sum(CNGDEM01), votes_rep01 = sum(CNGREP01)) |>
+    filter(votes_dem01 != 0 & votes_rep01 != 0)
+
+#calculate mean-median and efficiency gap
+vote_counts_by_sr_prec |>
+    mutate(prop_rep = votes_rep01 / (votes_dem01 + votes_rep01)) |>
+    summarize("mean-median" = mean(prop_rep) - median(prop_rep), efficiency = (votes_wasted(votes_rep01, votes_dem01) - votes_wasted(votes_dem01, votes_rep01)) / (votes_wasted(votes_rep01, votes_dem01) + votes_wasted(votes_dem01, votes_rep01)))
+
+
+```

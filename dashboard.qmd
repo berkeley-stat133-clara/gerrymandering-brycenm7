@@ -3,3 +3,150 @@ title: Dashboard
 format: dashboard
 ---
 
+``` {r}
+#| include: false
+#| echo: false
+#imports
+library(dplyr)
+library(stringr)
+library(sf)
+library(ggplot2)
+
+clean_sr_votes = readRDS("data/clean_sr_votes")
+clean_vote_counts = readRDS("data/clean_vote_counts")
+weighted_votes = readRDS("data/weighted_votes")
+```
+
+# Analysis of Congressional Election Results Using Original, 2020, and post 2025 Special Election District Maps
+
+## Maps of Original 2020 SR Districts and Redrawn 2025 Districts
+
+```{r}
+#| include: false
+#| echo: false
+
+prop_ca_prec = st_read("data/shapefiles/AB604/AB604.shp")
+ca_prec = st_read("data/shapefiles/srprec_state_g24_v01_shp/srprec_state_g24_v01_shp.shp")
+sr_votes = read.csv("data/state_g24_sov_data_by_g24_srprec.csv")
+
+#correct errors
+ca_prec <- ca_prec |>
+ st_transform(crs = 3310) |> # switch to equal area projection first
+ st_set_precision(1) |> # snap points to 1 m grid
+ st_make_valid() |> # fix self-intersections/bow-ties
+ st_collection_extract("POLYGON")
+
+prop_ca_prec = prop_ca_prec |>
+    st_transform(crs = 3310)
+```
+
+```{r}
+original_ca_prec = ca_prec |>
+    left_join(sr_votes, by = "SRPREC_KEY") |>
+    group_by(CDDIST) |>
+    summarize(geometry = st_union(geometry)) |>
+    filter(!is.na(CDDIST) & CDDIST != 0)
+
+plot_original = original_ca_prec |>
+    ggplot() +
+    geom_sf(aes(fill = factor(CDDIST), color = NA)) +
+    labs(title = "Original 2020 SR Districts") +
+    theme(legend.position = "none")
+
+plot_new = prop_ca_prec |>
+    ggplot() +
+    geom_sf(aes(fill = factor(DISTRICT), color = NA)) +
+    labs(title = "Proposed 2025 SR Districts")+
+    theme(legend.position = "none")
+
+print(plot_original)
+print(plot_new)
+```
+
+## 2024 Election Summary Statistics
+
+### 2024 Election: Actual Results
+
+```{r}
+#| echo: false
+
+#number and proportion of seats won by democrats
+dem_counts_actual = clean_vote_counts |>
+    group_by(CDDIST) |>
+    summarize(votes_dem01 = sum(CNGDEM01), votes_rep01 = sum(CNGREP01), votes_dem02 = sum(CNGDEM02)) |>
+    filter(!is.na(votes_dem01))
+
+num_dem_win = sum((dem_counts_actual$votes_dem01 > dem_counts_actual$votes_rep01)) + sum(dem_counts_actual$votes_dem02 != 0)
+
+print(paste("Of California's", length(dem_counts_actual$votes_dem01), "congressional elections in 2024,", num_dem_win, "were won by Democrats, or", num_dem_win / length(dem_counts_actual$votes_dem01), "of congressional elections"))
+
+#mean-median score and efficieny
+
+#group votes by congressional precinct (only considers precincts with D-R races)
+vote_counts_by_prec = clean_vote_counts |>
+    group_by(CDDIST) |>
+    summarize(votes_dem01 = sum(CNGDEM01), votes_rep01 = sum(CNGREP01)) |>
+    filter(votes_dem01 != 0 & votes_rep01 != 0)
+
+#function for counting votes wasted
+votes_wasted = function(a, b) {
+    wasted_a = 0
+    for (i in length(a)) {
+        votes_a = a[i]
+        votes_b = b[i]
+        if (votes_a < votes_b) {
+            wasted_a = wasted_a + votes_a
+        } else {
+            wasted_a = wasted_a + (votes_a - floor((votes_a + votes_b) / 2))
+        }
+    }
+    wasted_a
+}
+
+#calculate mean-median and efficiency gap
+m_m_efficiency_actual = vote_counts_by_prec |>
+    mutate(prop_rep = votes_rep01 / (votes_dem01 + votes_rep01)) |>
+    summarize(mean_median = mean(prop_rep) - median(prop_rep), efficiency = (votes_wasted(votes_rep01, votes_dem01) - votes_wasted(votes_dem01, votes_rep01)) / (votes_wasted(votes_rep01, votes_dem01) + votes_wasted(votes_dem01, votes_rep01)))
+
+print(paste("The mean-median score across all congressional voting districts in California in 2024 was", m_m_efficiency_actual$mean_median))
+
+print(paste("The efficiency score across all congressional voting districts in California in 2024 was", m_m_efficiency_actual$efficiency))
+
+```
+
+### 2024 Election: Results with 2025 Proposed Redistricting
+```{r}
+#group votes by precinct 
+dem_counts_prop = weighted_votes |>
+    st_drop_geometry() |>
+    group_by(CDDIST) |>
+    summarize(votes_dem01 = sum(CNGDEM01), votes_rep01 = sum(CNGREP01), votes_dem02 = sum(CNGDEM02)) |>
+    filter(!is.na(votes_dem01))
+
+#calculate the number of democrat wins
+num_dem_win_prop = sum((dem_counts_prop$votes_dem01 > dem_counts_prop$votes_rep01)) + sum(dem_counts_prop$votes_dem02 != 0)
+
+print(paste("If the new 2025 districts were used, of California's", length(dem_counts_prop$votes_dem01), "congressional elections,", num_dem_win, "would have been won by Democrats, or", num_dem_win_prop / length(dem_counts_prop$votes_dem01), "of congressional elections"))
+
+
+#calculate mean-median and efficiency gap
+
+#group votes by congressional precinct (only considers precincts with D-R races)
+vote_counts_prop = clean_sr_votes |>
+    group_by(CDDIST) |>
+    summarize(votes_dem01 = sum(CNGDEM01), votes_rep01 = sum(CNGREP01)) |>
+    filter(votes_dem01 != 0 & votes_rep01 != 0)
+
+m_m_efficiency_prop = vote_counts_prop |>
+    mutate(p_rep = votes_rep01 / (votes_dem01 + votes_rep01)) |>
+    summarize(mean_median = mean(p_rep) - median(p_rep), efficiency = (votes_wasted(votes_rep01, votes_dem01) - votes_wasted(votes_dem01, votes_rep01)) / (votes_wasted(votes_rep01, votes_dem01) + votes_wasted(votes_dem01, votes_rep01)))
+
+print(paste("The mean-median score across all congressional voting districts in California in 2024, if the proposed districts were used, would be", m_m_efficiency_prop$mean_median))
+
+print(paste("The efficiency score across all congressional voting districts in California in 2024, if the proposed districts were used, would be", m_m_efficiency_prop$efficiency))
+
+```
+
+## Methodology
+
+The data used in the project comes from the California Secretary of State website.  To clean the data, rows without voting information, as well as rows not within a district were removed.  Columns that contained only numeric data like voter registrations, and vote counts, were converted to integers.  Projected results from the 2024 election given the 2025 proposed districts were estimated by assuming voters in each precinct were distributed uniformly across the precinct.  Conclusions regarding gerrymandering should not only be extracted from the summary statistics.  Rather, the summary statistics should be used along with other data about California voters to tell a qualitative story.
