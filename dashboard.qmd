@@ -1,5 +1,5 @@
 ---
-title: Dashboard
+title: 2024 Congressional Election Gerrymandering Analysys
 format: dashboard
 ---
 
@@ -17,10 +17,7 @@ clean_vote_counts = readRDS("data/clean_vote_counts")
 weighted_votes = readRDS("data/weighted_votes")
 ```
 
-# Analysis of Congressional Election Results Using Original, 2020, and post 2025 Special Election District Maps
-
-## Maps of Original 2020 SR Districts and Redrawn 2025 Districts
-
+## Row
 ```{r}
 #| include: false
 #| echo: false
@@ -40,6 +37,7 @@ prop_ca_prec = prop_ca_prec |>
     st_transform(crs = 3310)
 ```
 
+### Column {width=45%}
 ```{r}
 original_ca_prec = ca_prec |>
     left_join(sr_votes, by = "SRPREC_KEY") |>
@@ -53,19 +51,29 @@ plot_original = original_ca_prec |>
     labs(title = "Original 2020 SR Districts") +
     theme(legend.position = "none")
 
+print(plot_original)
+```
+
+### Column {width = 45%}
+``` {r}
 plot_new = prop_ca_prec |>
     ggplot() +
     geom_sf(aes(fill = factor(DISTRICT), color = NA)) +
     labs(title = "Proposed 2025 SR Districts")+
     theme(legend.position = "none")
 
-print(plot_original)
 print(plot_new)
 ```
 
-## 2024 Election Summary Statistics
-
+## Row
+### Column {width=45%}
+::: {.card}
 ### 2024 Election: Actual Results
+Of California's 52 congressional elections in 2024, 46 were won by democrats.  
+
+The mean-median score across all districts was 0.0108.
+
+The effifiency score across all districts was 0.3476.
 
 ```{r}
 #| echo: false
@@ -76,9 +84,7 @@ dem_counts_actual = clean_vote_counts |>
     summarize(votes_dem01 = sum(CNGDEM01), votes_rep01 = sum(CNGREP01), votes_dem02 = sum(CNGDEM02)) |>
     filter(!is.na(votes_dem01))
 
-num_dem_win = sum((dem_counts_actual$votes_dem01 > dem_counts_actual$votes_rep01)) + sum(dem_counts_actual$votes_dem02 != 0)
-
-print(paste("Of California's", length(dem_counts_actual$votes_dem01), "congressional elections in 2024,", num_dem_win, "were won by Democrats, or", num_dem_win / length(dem_counts_actual$votes_dem01), "of congressional elections"))
+num_dem_win = sum((dem_counts_actual$votes_dem01 > dem_counts_actual$votes_rep01))
 
 #mean-median score and efficieny
 
@@ -107,14 +113,19 @@ votes_wasted = function(a, b) {
 m_m_efficiency_actual = vote_counts_by_prec |>
     mutate(prop_rep = votes_rep01 / (votes_dem01 + votes_rep01)) |>
     summarize(mean_median = mean(prop_rep) - median(prop_rep), efficiency = (votes_wasted(votes_rep01, votes_dem01) - votes_wasted(votes_dem01, votes_rep01)) / (votes_wasted(votes_rep01, votes_dem01) + votes_wasted(votes_dem01, votes_rep01)))
-
-print(paste("The mean-median score across all congressional voting districts in California in 2024 was", m_m_efficiency_actual$mean_median))
-
-print(paste("The efficiency score across all congressional voting districts in California in 2024 was", m_m_efficiency_actual$efficiency))
-
 ```
 
+:::
+
+### Column {width=45%}
+::: {.card}
 ### 2024 Election: Results with 2025 Proposed Redistricting
+
+Of California's 52 congressional elections in 2024, 46 would have been won by democrats, the same as with the original districts.
+
+The mean-median score across all districts would have been 0.0113.
+
+The effifiency score across all districts would have been 0.34758.
 ```{r}
 #group votes by precinct 
 dem_counts_prop = weighted_votes |>
@@ -124,10 +135,7 @@ dem_counts_prop = weighted_votes |>
     filter(!is.na(votes_dem01))
 
 #calculate the number of democrat wins
-num_dem_win_prop = sum((dem_counts_prop$votes_dem01 > dem_counts_prop$votes_rep01)) + sum(dem_counts_prop$votes_dem02 != 0)
-
-print(paste("If the new 2025 districts were used, of California's", length(dem_counts_prop$votes_dem01), "congressional elections,", num_dem_win, "would have been won by Democrats, or", num_dem_win_prop / length(dem_counts_prop$votes_dem01), "of congressional elections"))
-
+num_dem_win_prop = sum((dem_counts_prop$votes_dem01 > dem_counts_prop$votes_rep01))
 
 #calculate mean-median and efficiency gap
 
@@ -140,13 +148,14 @@ vote_counts_prop = clean_sr_votes |>
 m_m_efficiency_prop = vote_counts_prop |>
     mutate(p_rep = votes_rep01 / (votes_dem01 + votes_rep01)) |>
     summarize(mean_median = mean(p_rep) - median(p_rep), efficiency = (votes_wasted(votes_rep01, votes_dem01) - votes_wasted(votes_dem01, votes_rep01)) / (votes_wasted(votes_rep01, votes_dem01) + votes_wasted(votes_dem01, votes_rep01)))
-
-print(paste("The mean-median score across all congressional voting districts in California in 2024, if the proposed districts were used, would be", m_m_efficiency_prop$mean_median))
-
-print(paste("The efficiency score across all congressional voting districts in California in 2024, if the proposed districts were used, would be", m_m_efficiency_prop$efficiency))
-
 ```
 
+:::
+
+## Row
+::: {.card}
 ## Methodology
 
 The data used in the project comes from the California Secretary of State website.  To clean the data, rows without voting information, as well as rows not within a district were removed.  Columns that contained only numeric data like voter registrations, and vote counts, were converted to integers.  Projected results from the 2024 election given the 2025 proposed districts were estimated by assuming voters in each precinct were distributed uniformly across the precinct.  Conclusions regarding gerrymandering should not only be extracted from the summary statistics.  Rather, the summary statistics should be used along with other data about California voters to tell a qualitative story.
+
+:::
